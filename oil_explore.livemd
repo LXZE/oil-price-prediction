@@ -1,0 +1,88 @@
+<!-- livebook:{"autosave_interval_s":30} -->
+
+# Oil_explore_notebook
+
+```elixir
+Mix.install([
+  {:explorer, "~> 0.2.0"},
+  {:kino, "~> 0.6.2"},
+  {:jason, "~> 1.2"},
+  {:kino_vega_lite, "~> 0.1.1"}
+])
+
+alias Explorer.DataFrame, as: DF
+alias Explorer.Series, as: SR
+```
+
+## Section
+
+```elixir
+df = DF.new(date: Date.range(~D[2018-01-01], ~D[2022-07-21]) |> Enum.to_list())
+```
+
+```elixir
+date_convert_thai = fn df ->
+  DF.mutate(df, %{
+    "date" =>
+      &SR.transform(&1["date"], fn row ->
+        String.split(row, "/")
+        # |> (fn [d,m,y] -> Date.from_iso8601("#{y}-#{m}-#{d}") end).()
+        |> Enum.map(fn i -> String.to_integer(i) end)
+        |> (fn [d, m, y] -> Date.new(y, m, d) end).()
+        |> elem(1)
+      end)
+  })
+end
+
+date_convert_foreign = fn df ->
+  DF.mutate(df, %{
+    "date" =>
+      &SR.transform(&1["date"], fn row ->
+        String.split(row, "/")
+        # |> (fn [m,d,y] -> Date.from_iso8601("#{y}-#{m}-#{String.pad_leading(d,2,"0")}") end).()
+        |> Enum.map(fn i -> String.to_integer(i) end)
+        |> (fn [m, d, y] -> Date.new(y, m, d) end).()
+        |> elem(1)
+      end)
+  })
+end
+```
+
+```elixir
+thai_df =
+  DF.from_csv!("raw/thai_oil_price.csv")
+  |> date_convert_thai.()
+  |> DF.select(["date", "gasohol95"])
+```
+
+```elixir
+ref = %{
+  "Cushing_OK_WTI_Spot_Price_FOB_Daily.csv" =>
+    {"WTI Cushing Oklahoma/Crude Oil/Dollars per Barrel", "WTI"},
+  "Europe_Brent_Spot_Price_FOB_Daily.csv" =>
+    {"Brent Europe/Crude Oil/Dollars per Barrel", "Brent"},
+  "U.S._Gulf_Coast_Conventional_Gasoline_Regular_Spot_Price_FOB_Daily.csv" =>
+    {"US Gulf Coast/Conventional Gasoline/Dollars per Gallon", "US"}
+}
+
+foreign_df =
+  Map.keys(ref)
+  |> Enum.map(fn file_name ->
+    DF.from_csv!("raw/#{file_name}", skip_rows: 4)
+    |> DF.rename(%{"Day" => "date", elem(ref[file_name], 0) => elem(ref[file_name], 1)})
+    |> date_convert_foreign.()
+    |> DF.filter(&SR.greater_equal(&1["date"], ~D[2018-01-01]))
+  end)
+  |> Enum.reduce(fn df_x, df_acc ->
+    DF.join(df_acc, df_x, how: :left)
+  end)
+```
+
+```elixir
+df = DF.join(df, foreign_df, how: :left)
+df = DF.join(df, thai_df, how: :left)
+```
+
+```elixir
+DF.table(df, limit: 20)
+```
