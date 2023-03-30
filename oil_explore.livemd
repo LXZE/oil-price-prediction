@@ -4,17 +4,56 @@
 
 ```elixir
 Mix.install([
-  {:explorer, "~> 0.2.0"},
-  {:kino, "~> 0.6.2"},
-  {:jason, "~> 1.2"},
-  {:kino_vega_lite, "~> 0.1.1"}
+  {:explorer, "~> 0.5.0"},
+  {:kino, "~> 0.9.0"},
+  {:json, "~> 1.4"},
+  {:kino_vega_lite, "~> 0.1.8"},
+  {:httpoison, "~> 2.0"}
 ])
 
 alias Explorer.DataFrame, as: DF
 alias Explorer.Series, as: SR
 ```
 
-## Section
+## Extract
+
+Download main data from pttor API
+
+```elixir
+current_year = DateTime.utc_now().year
+HTTPoison.start()
+
+raw_data =
+  HTTPoison.post!(
+    "https://orapiweb2.pttor.com/api/oilprice/search",
+    JSON.encode!(
+      provinceId: 1,
+      districtId: nil,
+      year: current_year,
+      month: nil,
+      pageSize: 1_000_000,
+      pageIndex: 0
+    ),
+    [{"Content-Type", "application/json"}]
+  )
+```
+
+```elixir
+# Extract data field
+data = JSON.decode!(raw_data.body)["data"]
+```
+
+```elixir
+# Filter only price Data and Date
+Enum.map(data, fn map ->
+  {
+    Map.get(map, "priceDate"),
+    Map.get(map, "priceData") |> JSON.decode!()
+  }
+end)
+```
+
+## Transform
 
 ```elixir
 df = DF.new(date: Date.range(~D[2018-01-01], ~D[2022-07-21]) |> Enum.to_list())

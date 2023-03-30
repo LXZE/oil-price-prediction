@@ -8,4 +8,4 @@ docker run \
 	-v $(pwd):/data \
 	-e LIVEBOOK_PASSWORD="livebook_secret" \
 	--name livebook \
-	livebook/livebook
+	ghcr.io/livebook-dev/livebook
